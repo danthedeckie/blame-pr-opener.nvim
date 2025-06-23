@@ -11,11 +11,26 @@ local config = {
   -- If nil, the plugin will try to auto-detect the correct command.
   -- You can override it with a specific command, e.g., "brave" or {"wsl-open"}.
   open_command = nil,
+  -- NEW: try to jump straight to GitHub commit page when true
+  open_exact_commit = false,
 }
 
 function M.setup(opts)
   opts = opts or {}
   config = vim.tbl_deep_extend('force', config, opts)
+end
+
+-- Returns a GitHub commit-page URL if the current repo’s origin is on GitHub,
+-- or nil otherwise.
+local function github_commit_url(commit_id)
+  local remote = vim.fn.trim(vim.fn.system({ 'git', 'config', '--get', 'remote.origin.url' }))
+  if remote == '' or not remote:find('github%.com') then return nil end
+
+  -- matches both “git@github.com:owner/repo(.git)” and “https://github.com/owner/repo(.git)”
+  local owner, repo = remote:match('github%.com[:/]+([^/]+)/([^%.]+)')
+  if not (owner and repo) then return nil end
+
+  return string.format('https://github.com/%s/%s/commit/%s', owner, repo, commit_id)
 end
 
 function M.open()
@@ -41,8 +56,15 @@ function M.open()
     return
   end
 
-  -- Use the configured URL template
-  local url = string.format(config.url_template, commit_id)
+  -- Build the URL
+  local url
+  if config.open_exact_commit then
+    url = github_commit_url(commit_id)
+  end
+  -- fall back to search URL if exact commit URL couldn't be built
+  if not url then
+    url = string.format(config.url_template, commit_id)
+  end
 
   -- Use the configured open command or auto-detect it
   local open_cmd
